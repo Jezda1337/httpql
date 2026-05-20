@@ -8,7 +8,7 @@ HTTPQL is a psql-inspired interactive shell for exploring and working with HTTP 
 $ hreq
 
 hreq> \set host http://localhost:6969
-hreq> GET /users
+hreq> get /users
 
 ---------
 Status: 200 OK
