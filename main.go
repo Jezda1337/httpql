@@ -55,7 +55,9 @@ func handler(input string, s *session) {
 			return
 		}
 		if strings.EqualFold(parts[1], "host") {
-			s.host = parts[2]
+			if before, ok := strings.CutSuffix(parts[2], "/"); ok {
+				s.host = before
+			}
 		} else {
 			s.vars[parts[1]] = parts[2]
 		}
