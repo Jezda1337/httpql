@@ -43,7 +43,7 @@ func handler(input string, s *session) {
 	input = strings.TrimSpace(input)
 	parts := strings.SplitN(input, " ", 3)
 
-	if len(parts) < 2 {
+	if len(parts) < 2 && parts[0] != "\\env" {
 		fmt.Println("invalid command")
 		return
 	}
@@ -70,6 +70,10 @@ func handler(input string, s *session) {
 		err := makeRequest(method, endpoint, s)
 		if err != nil {
 			fmt.Println("request failed: ", err)
+		}
+	case "\\env":
+		for k, v := range s.vars {
+			fmt.Printf("%s = %s\n", k, v)
 		}
 	}
 }
