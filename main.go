@@ -57,10 +57,13 @@ func handler(input string, s *session) {
 		if strings.EqualFold(parts[1], "host") {
 			if before, ok := strings.CutSuffix(parts[2], "/"); ok {
 				s.host = before
+			} else {
+				s.host = parts[2]
 			}
 		} else {
 			s.vars[parts[1]] = parts[2]
 		}
+		fmt.Println("ok")
 	case "get", "post", "put", "delete":
 		endpoint := parts[1]
 		method := strings.ToUpper(parts[0])
@@ -88,7 +91,9 @@ func makeRequest(method, endpoint string, s *session) error {
 	if err != nil {
 		return err
 	}
-
+	fmt.Println("---------")
+	fmt.Println("Status: ", res.Status)
+	fmt.Println("---------")
 	fmt.Println(string(body))
 	return nil
 }
