@@ -79,6 +79,7 @@ func handler(input string, s *session) {
 }
 
 func makeRequest(method, endpoint string, s *session) error {
+	endpoint = parseEndpoint(endpoint, s)
 	url := s.host + endpoint
 
 	req, err := http.NewRequest(method, url, nil)
@@ -100,4 +101,13 @@ func makeRequest(method, endpoint string, s *session) error {
 	fmt.Println("---------")
 	fmt.Println(string(body))
 	return nil
+}
+
+func parseEndpoint(endpoint string, s *session) string {
+	for k, v := range s.vars {
+		if strings.Contains(endpoint, "{"+k+"}") {
+			endpoint = strings.ReplaceAll(endpoint, "{"+k+"}", v)
+		}
+	}
+	return endpoint
 }
