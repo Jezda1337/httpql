@@ -8,9 +8,13 @@ HTTPQL is a psql-inspired interactive shell for exploring and working with HTTP 
 $ hreq
 
 hreq> \set host http://localhost:6969
+hreq> \set token abc123
+hreq> \header Authorization Bearer {{token}}
+
 hreq> get /users
 
 ---------
+GET http://localhost:6969/users
 Status: 200 OK
 ---------
 
