@@ -35,57 +35,87 @@ func main() {
 		if err != nil {
 			break
 		}
-		handler(line, &s)
+		handle(line, &s)
 	}
 }
 
-func handler(input string, s *session) {
+func handle(input string, s *session) {
 	input = strings.TrimSpace(input)
-	parts := strings.SplitN(input, " ", 3)
+	// parts := strings.SplitN(input, " ", 3)
+	parts := strings.Fields(input)
 
-	if len(parts) < 2 && parts[0] != "\\env" {
-		fmt.Println("invalid command")
+	if len(parts) == 0 || parts[0] == "" {
 		return
 	}
 
 	switch strings.ToLower(parts[0]) {
 	case "\\set":
-		if len(parts) != 3 {
+		if len(parts) < 3 {
 			fmt.Println("usage: \\set key value")
 			return
 		}
-		if strings.EqualFold(parts[1], "host") {
-			if before, ok := strings.CutSuffix(parts[2], "/"); ok {
-				s.host = before
-			} else {
-				s.host = parts[2]
-			}
+
+		key := parts[1]
+		value := strings.Join(parts[2:], " ")
+
+		if strings.EqualFold(key, "host") {
+			s.host = strings.TrimRight(value, "/")
 		} else {
-			s.vars[parts[1]] = parts[2]
+			s.vars[key] = value
 		}
 		fmt.Println("ok")
+	case "\\header":
+		if len(parts) < 3 {
+			fmt.Println("usage: \\header key value")
+			return
+		}
+
+		key := parts[1]
+		value := strings.Join(parts[2:], " ")
+
+		value = interpolate(value, s)
+
+		s.headers[key] = value
+		fmt.Println("ok")
 	case "get", "post", "put", "delete":
-		endpoint := parts[1]
+		if len(parts) < 2 {
+			fmt.Println("usage: <method> /path")
+			return
+		}
+
+		endpoint := interpolate(parts[1], s)
 		method := strings.ToUpper(parts[0])
 		err := makeRequest(method, endpoint, s)
 		if err != nil {
 			fmt.Println("request failed: ", err)
 		}
 	case "\\env":
+		fmt.Println("host =", s.host)
+
+		fmt.Println("\nvars:")
 		for k, v := range s.vars {
-			fmt.Printf("%s = %s\n", k, v)
+			fmt.Printf("\t%s = %s\n", k, v)
+		}
+
+		fmt.Println("\nheaders:")
+		for k, v := range s.headers {
+			fmt.Printf("\t%s = %s\n", k, v)
 		}
 	}
 }
 
 func makeRequest(method, endpoint string, s *session) error {
-	endpoint = parseEndpoint(endpoint, s)
 	url := s.host + endpoint
 
 	req, err := http.NewRequest(method, url, nil)
 	if err != nil {
 		return err
 	}
+
+	for k, v := range s.headers {
+		req.Header.Set(k, v)
+	}
+
 	res, err := s.c.Do(req)
 	if err != nil {
 		return err
@@ -97,17 +127,21 @@ func makeRequest(method, endpoint string, s *session) error {
 		return err
 	}
 	fmt.Println("---------")
+	fmt.Println(method, url)
 	fmt.Println("Status: ", res.Status)
 	fmt.Println("---------")
 	fmt.Println(string(body))
 	return nil
 }
 
-func parseEndpoint(endpoint string, s *session) string {
+func interpolate(input string, s *session) string {
 	for k, v := range s.vars {
-		if strings.Contains(endpoint, "{"+k+"}") {
-			endpoint = strings.ReplaceAll(endpoint, "{"+k+"}", v)
-		}
+		input = strings.ReplaceAll(
+			input,
+			"{{"+k+"}}",
+			v,
+		)
 	}
-	return endpoint
+
+	return input
 }
