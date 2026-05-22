@@ -24,24 +24,47 @@ func main() {
 		c:       &http.Client{},
 	}
 
-	rl, err := readline.New("hreq> ")
+	defaultPrompt := "httpql> "
+
+	rl, err := readline.New(defaultPrompt)
 	if err != nil {
 		panic(err)
 	}
 	defer rl.Close()
+
+	var buffer []string
 
 	for {
 		line, err := rl.Readline()
 		if err != nil {
 			break
 		}
-		handle(line, &s)
+
+		line = strings.TrimSpace(line)
+
+		if strings.HasPrefix(line, "\\") {
+			handle(line, &s)
+			continue
+		}
+
+		buffer = append(buffer, line)
+		rl.SetPrompt(">> ")
+
+		if strings.HasSuffix(line, ";") {
+			cmd := strings.Join(buffer, " ")
+
+			buffer = nil
+
+			rl.SetPrompt(defaultPrompt)
+			rl.SaveHistory(cmd)
+
+			handle(cmd, &s)
+		}
 	}
 }
 
 func handle(input string, s *session) {
 	input = strings.TrimSpace(input)
-	// parts := strings.SplitN(input, " ", 3)
 	parts := strings.Fields(input)
 
 	if len(parts) == 0 || parts[0] == "" {
