@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/chzyer/readline"
@@ -124,6 +125,8 @@ func handle(input string, s *session) {
 		for k, v := range s.headers {
 			fmt.Printf("\t%s = %s\n", k, v)
 		}
+	case "\\q":
+		os.Exit(0)
 	}
 }
 
