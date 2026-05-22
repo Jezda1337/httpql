@@ -44,7 +44,7 @@ func main() {
 		line = strings.TrimSpace(line)
 
 		if strings.HasPrefix(line, "\\") {
-			handle(line, &s)
+			executeCommand(line, &s)
 			continue
 		}
 
@@ -59,12 +59,12 @@ func main() {
 			rl.SetPrompt(defaultPrompt)
 			rl.SaveHistory(cmd)
 
-			handle(cmd, &s)
+			executeCommand(cmd, &s)
 		}
 	}
 }
 
-func handle(input string, s *session) {
+func executeCommand(input string, s *session) {
 	input = strings.TrimSpace(input)
 	parts := strings.Fields(input)
 
