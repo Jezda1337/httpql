@@ -121,6 +121,12 @@ func executeCommand(input string, s *session) {
 		cmd := strings.Join(parts, " ")
 		pipeIndex := strings.Index(cmd, "|")
 
+		_, err := exec.LookPath("jq")
+		if err != nil {
+			fmt.Println("jq not found in the $PATH")
+			return
+		}
+
 		endpoint := interpolate(parts[1], s)
 		method := strings.ToUpper(parts[0])
 		output, err := makeRequest(method, endpoint, s)
