@@ -25,7 +25,8 @@ func main() {
 		c:       &http.Client{},
 	}
 
-	defaultPrompt := "httpql> "
+	// defaultPrompt := "httpql> "
+	defaultPrompt := "\033[31m»\033[0m "
 
 	rl, err := readline.New(defaultPrompt)
 	if err != nil {
