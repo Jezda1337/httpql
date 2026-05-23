@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/chzyer/readline"
@@ -15,6 +17,14 @@ type session struct {
 	vars    map[string]string
 	headers map[string]string
 	c       *http.Client
+}
+
+type output struct {
+	req    *http.Request
+	body   string
+	method string
+	url    string
+	status string
 }
 
 func main() {
@@ -108,13 +118,30 @@ func executeCommand(input string, s *session) {
 			fmt.Println("usage: <method> /path")
 			return
 		}
+		cmd := strings.Join(parts, " ")
+		pipeIndex := strings.Index(cmd, "|")
 
 		endpoint := interpolate(parts[1], s)
 		method := strings.ToUpper(parts[0])
-		err := makeRequest(method, endpoint, s)
+		output, err := makeRequest(method, endpoint, s)
 		if err != nil {
 			fmt.Println("request failed: ", err)
 		}
+
+		if pipeIndex != -1 {
+			jqCmd := cmd[pipeIndex:]
+			cmd = fmt.Sprintf("echo '%s' %s ", output.body, jqCmd)
+			c := exec.Command("bash", "-c", cmd)
+			out := bytes.Buffer{}
+			c.Stdout = &out
+			if err := c.Run(); err != nil {
+				fmt.Println("jq command failed: ", err)
+			}
+			output.body = strings.TrimSpace(out.String())
+		}
+
+		printOutput(*output)
+
 	case "\\env":
 		fmt.Println("host =", s.host)
 
@@ -132,12 +159,12 @@ func executeCommand(input string, s *session) {
 	}
 }
 
-func makeRequest(method, endpoint string, s *session) error {
+func makeRequest(method, endpoint string, s *session) (*output, error) {
 	url := s.host + endpoint
 
 	req, err := http.NewRequest(method, url, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	for k, v := range s.headers {
@@ -146,20 +173,23 @@ func makeRequest(method, endpoint string, s *session) error {
 
 	res, err := s.c.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	fmt.Println("---------")
-	fmt.Println(method, url)
-	fmt.Println("Status: ", res.Status)
-	fmt.Println("---------")
-	fmt.Println(string(body))
-	return nil
+	o := &output{
+		req:    req,
+		body:   string(body),
+		method: method,
+		url:    url,
+		status: res.Status,
+	}
+
+	return o, nil
 }
 
 func interpolate(input string, s *session) string {
@@ -172,4 +202,12 @@ func interpolate(input string, s *session) string {
 	}
 
 	return input
+}
+
+func printOutput(o output) {
+	fmt.Println("---------")
+	fmt.Println(o.method, o.url)
+	fmt.Println("Status: ", o.status)
+	fmt.Println("---------")
+	fmt.Println(o.body)
 }
