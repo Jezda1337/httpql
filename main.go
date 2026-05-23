@@ -54,6 +54,7 @@ func main() {
 
 		if strings.HasSuffix(line, ";") {
 			cmd := strings.Join(buffer, " ")
+			cmd = strings.TrimSuffix(cmd, ";")
 
 			buffer = nil
 
