@@ -2,11 +2,13 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/chzyer/readline"
@@ -17,6 +19,12 @@ type session struct {
 	vars    map[string]string
 	headers map[string]string
 	c       *http.Client
+}
+
+type sessionFile struct {
+	Host    string            `json:"host"`
+	Vars    map[string]string `json:"vars"`
+	Headers map[string]string `json:"headers"`
 }
 
 type output struct {
@@ -160,6 +168,31 @@ func executeCommand(input string, s *session) {
 		for k, v := range s.headers {
 			fmt.Printf("\t%s = %s\n", k, v)
 		}
+	case "\\session":
+		key := parts[1]
+		name := parts[2]
+
+		if key == "save" {
+			err := saveSession(name, s)
+			if err != nil {
+				fmt.Printf("failed to save session %s\n", name)
+			}
+		}
+		if key == "use" {
+			ls, err := loadSession(name)
+			*s = *ls
+			if err != nil {
+				fmt.Printf("faild to load session %s\n", name)
+			}
+
+			fmt.Println("%+V", s)
+			fmt.Println("%+V", ls)
+		}
+	case "\\sessions":
+		err := printSessions()
+		if err != nil {
+			fmt.Println(err)
+		}
 	case "\\q":
 		os.Exit(0)
 	}
@@ -216,4 +249,54 @@ func printOutput(o output) {
 	fmt.Println("Status: ", o.status)
 	fmt.Println("---------")
 	fmt.Println(o.body)
+}
+
+func saveSession(name string, s *session) error {
+	dir := filepath.Join(os.Getenv("HOME"), ".httpql")
+	os.MkdirAll(dir, 0755)
+
+	file := filepath.Join(dir, name+".json")
+
+	data := sessionFile{
+		Host:    s.host,
+		Vars:    s.vars,
+		Headers: s.headers,
+	}
+
+	b, _ := json.MarshalIndent(data, "", "  ")
+	return os.WriteFile(file, b, 0644)
+}
+
+func loadSession(name string) (*session, error) {
+	dir := filepath.Join(os.Getenv("HOME"), ".httpql")
+	file := filepath.Join(dir, name+".json")
+
+	b, err := os.ReadFile(file)
+	if err != nil {
+		return nil, err
+	}
+
+	var sf sessionFile
+	json.Unmarshal(b, &sf)
+
+	return &session{
+		host:    sf.Host,
+		vars:    sf.Vars,
+		headers: sf.Headers,
+		c:       &http.Client{},
+	}, nil
+}
+
+func printSessions() error {
+	dir := filepath.Join(os.Getenv("HOME"), ".httpql")
+	entry, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+
+	for k, v := range entry {
+		fmt.Println(k, v)
+	}
+
+	return nil
 }

@@ -28,6 +28,16 @@ $ httpql
 # this will return just name ignoring rest of the response
 » get /users/{{userID}} | jq .name
 
+# example on how to use/save session
+# sessions are stored in $HOME/.httpql/
+# saved sessions holds all data you had set first, host, vars, headers, does not save history
+# using saved session loads host, vars and headers
+» \sessions # print all sessions
+» \session save session-name
+» \session use session-name
+
+» \env # print current session data
+
 ---------
 GET http://localhost:6969/users
 Status: 200 OK
