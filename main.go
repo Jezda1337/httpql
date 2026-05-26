@@ -113,7 +113,7 @@ func executeCommand(input string, s *session) {
 
 		s.headers[key] = value
 		fmt.Println("ok")
-	case "get", "post", "put", "delete":
+	case "get", "post", "put", "delete", "patch":
 		if len(parts) < 2 {
 			fmt.Println("usage: <method> /path")
 			return
