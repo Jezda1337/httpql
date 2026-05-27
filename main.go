@@ -184,9 +184,6 @@ func executeCommand(input string, s *session) {
 			if err != nil {
 				fmt.Printf("faild to load session %s\n", name)
 			}
-
-			fmt.Println("%+V", s)
-			fmt.Println("%+V", ls)
 		}
 	case "\\sessions":
 		err := printSessions()
