@@ -127,7 +127,14 @@ func executeCommand(input string, s *session) {
 			return
 		}
 		cmd := strings.Join(parts, " ")
+
+		var jsonBody string
 		pipeIndex := strings.Index(cmd, "|")
+		rawAfterPath := cmd[len(parts[0])+1+len(parts[1]):]
+		if pipeIndex != -1 {
+			rawAfterPath = rawAfterPath[:strings.Index(rawAfterPath, "|")]
+		}
+		jsonBody = strings.TrimSpace(rawAfterPath)
 
 		_, err := exec.LookPath("jq")
 		if err != nil {
@@ -137,7 +144,7 @@ func executeCommand(input string, s *session) {
 
 		endpoint := interpolate(parts[1], s)
 		method := strings.ToUpper(parts[0])
-		output, err := makeRequest(method, endpoint, s)
+		output, err := makeRequest(method, endpoint, s, jsonBody)
 		if err != nil {
 			fmt.Println("request failed: ", err)
 		}
@@ -195,10 +202,15 @@ func executeCommand(input string, s *session) {
 	}
 }
 
-func makeRequest(method, endpoint string, s *session) (*output, error) {
+func makeRequest(method, endpoint string, s *session, b string) (*output, error) {
 	url := s.host + endpoint
 
-	req, err := http.NewRequest(method, url, nil)
+	var bodyReader io.Reader
+	if b != "" {
+		bodyReader = strings.NewReader(b)
+	}
+
+	req, err := http.NewRequest(method, url, bodyReader)
 	if err != nil {
 		return nil, err
 	}
