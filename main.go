@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"os/exec"
@@ -26,6 +27,7 @@ type sessionFile struct {
 	Host    string            `json:"host"`
 	Vars    map[string]string `json:"vars"`
 	Headers map[string]string `json:"headers"`
+	Cookies []*http.Cookie    `json:"cookies"`
 }
 
 type output struct {
@@ -37,11 +39,14 @@ type output struct {
 }
 
 func main() {
+	jar, _ := cookiejar.New(nil)
 	s := session{
 		host:    "",
 		vars:    make(map[string]string),
 		headers: make(map[string]string),
-		c:       &http.Client{},
+		c: &http.Client{
+			Jar: jar,
+		},
 	}
 
 	// defaultPrompt := "httpql> "
@@ -122,6 +127,25 @@ func executeCommand(input string, s *session) error {
 		value = interpolate(value, s)
 
 		s.headers[key] = value
+		fmt.Println("ok")
+	case "\\cookie":
+		if len(parts) < 3 {
+			return fmt.Errorf("usage: \\cookie key value")
+		}
+
+		if s.host == "" {
+			return fmt.Errorf("error: must set host before setting cookies")
+		}
+
+		key := parts[1]
+		value := strings.Join(parts[2:], " ")
+
+		value = interpolate(value, s)
+
+		u, _ := url.Parse(s.host)
+		c := &http.Cookie{Name: key, Value: value, Path: "/"}
+		s.c.Jar.SetCookies(u, []*http.Cookie{c})
+
 		fmt.Println("ok")
 	case "get", "post", "put", "delete", "patch":
 		if len(parts) < 2 {
@@ -205,6 +229,12 @@ func executeCommand(input string, s *session) error {
 		for k, v := range s.headers {
 			fmt.Printf("\t%s = %s\n", k, v)
 		}
+
+		u, _ := url.Parse(s.host)
+		fmt.Println("\ncookies:")
+		for _, c := range s.c.Jar.Cookies(u) {
+			fmt.Printf("\t%s = %s\n", c.Name, c.Value)
+		}
 	case "\\session":
 		if len(parts) < 3 {
 			return fmt.Errorf("usage: \\session <save|use> <name>")
@@ -250,8 +280,6 @@ func makeRequest(method, endpoint string, s *session, b string) (*output, error)
 		return nil, err
 	}
 
-	// req.AddCookie()
-
 	for k, v := range s.headers {
 		req.Header.Set(k, v)
 	}
@@ -266,6 +294,7 @@ func makeRequest(method, endpoint string, s *session, b string) (*output, error)
 	if err != nil {
 		return nil, err
 	}
+
 	o := &output{
 		req:    req,
 		body:   string(body),
@@ -303,10 +332,14 @@ func saveSession(name string, s *session) error {
 
 	file := filepath.Join(dir, name+".json")
 
+	u, _ := url.Parse(s.host)
+	cookies := s.c.Jar.Cookies(u)
+
 	data := sessionFile{
 		Host:    s.host,
 		Vars:    s.vars,
 		Headers: s.headers,
+		Cookies: cookies,
 	}
 
 	b, err := json.MarshalIndent(data, "", "  ")
@@ -334,11 +367,17 @@ func loadSession(name string) (*session, error) {
 		return nil, err
 	}
 
+	jar, _ := cookiejar.New(nil)
+	u, _ := url.Parse(sf.Host)
+	jar.SetCookies(u, sf.Cookies)
+
 	return &session{
 		host:    sf.Host,
 		vars:    sf.Vars,
 		headers: sf.Headers,
-		c:       &http.Client{},
+		c: &http.Client{
+			Jar: jar,
+		},
 	}, nil
 }
 
