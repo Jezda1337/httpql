@@ -162,19 +162,16 @@ func executeCommand(input string, s *session) error {
 		jsonBody = strings.TrimSpace(rawAfterPath)
 
 		if jsonBody != "" && !strings.HasPrefix(jsonBody, "{") && !strings.HasPrefix(jsonBody, "[") && strings.Contains(jsonBody, "=") {
-			form := url.Values{}
-			fields := strings.FieldsSeq(jsonBody)
-			for field := range fields {
-				kv := strings.SplitN(field, "=", 2)
-				if len(kv) != 2 {
-					return fmt.Errorf("invalid form data: %s", field)
-				}
-				form.Add(kv[0], kv[1])
+			form, err := url.ParseQuery(jsonBody)
+			if err != nil {
+				return fmt.Errorf("invalid form data: %w", err)
 			}
 			jsonBody = form.Encode()
+
 			if _, ok := s.headers["Content-Type"]; !ok {
 				s.headers["Content-Type"] = "application/x-www-form-urlencoded"
 			}
+
 		} else {
 			if _, ok := s.headers["Content-Type"]; !ok {
 				s.headers["Content-Type"] = "application/json"
@@ -186,8 +183,10 @@ func executeCommand(input string, s *session) error {
 			return fmt.Errorf("jq not found in the $PATH")
 		}
 
-		if jsonBody != "" && !json.Valid([]byte(jsonBody)) {
-			return fmt.Errorf("error: invalid JSON body")
+		if jsonBody != "" && s.headers["Content-Type"] == "application/json" {
+			if !json.Valid([]byte(jsonBody)) {
+				return fmt.Errorf("error: invalid JSON body")
+			}
 		}
 
 		jsonBody = interpolate(jsonBody, s)
