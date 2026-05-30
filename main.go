@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -79,24 +80,26 @@ func main() {
 			rl.SetPrompt(defaultPrompt)
 			rl.SaveHistory(cmd)
 
-			executeCommand(cmd, &s)
+			if err := executeCommand(cmd, &s); err != nil {
+				fmt.Println(err)
+				continue
+			}
 		}
 	}
 }
 
-func executeCommand(input string, s *session) {
+func executeCommand(input string, s *session) error {
 	input = strings.TrimSpace(input)
 	parts := strings.Fields(input)
 
 	if len(parts) == 0 || parts[0] == "" {
-		return
+		return fmt.Errorf("input is empty")
 	}
 
 	switch strings.ToLower(parts[0]) {
 	case "\\set":
 		if len(parts) < 3 {
-			fmt.Println("usage: \\set key value")
-			return
+			return fmt.Errorf("usage: \\set key value")
 		}
 
 		key := parts[1]
@@ -110,8 +113,7 @@ func executeCommand(input string, s *session) {
 		fmt.Println("ok")
 	case "\\header":
 		if len(parts) < 3 {
-			fmt.Println("usage: \\header key value")
-			return
+			return fmt.Errorf("usage: \\header key value")
 		}
 
 		key := parts[1]
@@ -123,40 +125,68 @@ func executeCommand(input string, s *session) {
 		fmt.Println("ok")
 	case "get", "post", "put", "delete", "patch":
 		if len(parts) < 2 {
-			fmt.Println("usage: <method> /path")
-			return
+			return fmt.Errorf("usage: <method> /path")
 		}
 		cmd := strings.Join(parts, " ")
 
 		var jsonBody string
-		pipeIndex := strings.Index(cmd, "|")
+		pipeIndex := strings.Index(cmd, "|") // TODO - need better/robust parser
 		rawAfterPath := cmd[len(parts[0])+1+len(parts[1]):]
 		if pipeIndex != -1 {
 			rawAfterPath = rawAfterPath[:strings.Index(rawAfterPath, "|")]
 		}
 		jsonBody = strings.TrimSpace(rawAfterPath)
 
-		_, err := exec.LookPath("jq")
-		if err != nil {
-			fmt.Println("jq not found in the $PATH")
-			return
+		if jsonBody != "" && !strings.HasPrefix(jsonBody, "{") && !strings.HasPrefix(jsonBody, "[") && strings.Contains(jsonBody, "=") {
+			form := url.Values{}
+			fields := strings.FieldsSeq(jsonBody)
+			for field := range fields {
+				kv := strings.SplitN(field, "=", 2)
+				if len(kv) != 2 {
+					return fmt.Errorf("invalid form data: %s", field)
+				}
+				form.Add(kv[0], kv[1])
+			}
+			jsonBody = form.Encode()
+			if _, ok := s.headers["Content-Type"]; !ok {
+				s.headers["Content-Type"] = "application/x-www-form-urlencoded"
+			}
+		} else {
+			if _, ok := s.headers["Content-Type"]; !ok {
+				s.headers["Content-Type"] = "application/json"
+			}
 		}
 
+		_, err := exec.LookPath("jq")
+		if err != nil {
+			return fmt.Errorf("jq not found in the $PATH")
+		}
+
+		if jsonBody != "" && !json.Valid([]byte(jsonBody)) {
+			return fmt.Errorf("error: invalid JSON body")
+		}
+
+		jsonBody = interpolate(jsonBody, s)
 		endpoint := interpolate(parts[1], s)
 		method := strings.ToUpper(parts[0])
 		output, err := makeRequest(method, endpoint, s, jsonBody)
 		if err != nil {
-			fmt.Println("request failed: ", err)
+			return fmt.Errorf("request failed: %w", err)
 		}
 
 		if pipeIndex != -1 {
 			jqCmd := cmd[pipeIndex:]
-			cmd = fmt.Sprintf("echo '%s' %s ", output.body, jqCmd)
-			c := exec.Command("bash", "-c", cmd)
+			jqArgs := strings.Fields(jqCmd)[1:]
+			// TODO - maybe not the best DX
+			c := exec.Command("jq", jqArgs...)
+			c.Stdin = strings.NewReader(output.body)
 			out := bytes.Buffer{}
 			c.Stdout = &out
 			if err := c.Run(); err != nil {
+				fmt.Println(jqArgs)
 				fmt.Println("jq command failed: ", err)
+			} else {
+				output.body = strings.TrimSpace(out.String())
 			}
 			output.body = strings.TrimSpace(out.String())
 		}
@@ -176,6 +206,10 @@ func executeCommand(input string, s *session) {
 			fmt.Printf("\t%s = %s\n", k, v)
 		}
 	case "\\session":
+		if len(parts) < 3 {
+			return fmt.Errorf("usage: \\session <save|use> <name>")
+		}
+
 		key := parts[1]
 		name := parts[2]
 
@@ -187,10 +221,10 @@ func executeCommand(input string, s *session) {
 		}
 		if key == "use" {
 			ls, err := loadSession(name)
-			*s = *ls
 			if err != nil {
-				fmt.Printf("faild to load session %s\n", name)
+				return fmt.Errorf("failed to load session %s\n", name)
 			}
+			*s = *ls
 		}
 	case "\\sessions":
 		err := printSessions()
@@ -200,6 +234,7 @@ func executeCommand(input string, s *session) {
 	case "\\q":
 		os.Exit(0)
 	}
+	return nil
 }
 
 func makeRequest(method, endpoint string, s *session, b string) (*output, error) {
@@ -214,6 +249,8 @@ func makeRequest(method, endpoint string, s *session, b string) (*output, error)
 	if err != nil {
 		return nil, err
 	}
+
+	// req.AddCookie()
 
 	for k, v := range s.headers {
 		req.Header.Set(k, v)
@@ -272,8 +309,15 @@ func saveSession(name string, s *session) error {
 		Headers: s.headers,
 	}
 
-	b, _ := json.MarshalIndent(data, "", "  ")
-	return os.WriteFile(file, b, 0644)
+	b, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(file, b, 0644); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func loadSession(name string) (*session, error) {
@@ -286,7 +330,9 @@ func loadSession(name string) (*session, error) {
 	}
 
 	var sf sessionFile
-	json.Unmarshal(b, &sf)
+	if err := json.Unmarshal(b, &sf); err != nil {
+		return nil, err
+	}
 
 	return &session{
 		host:    sf.Host,
@@ -303,8 +349,10 @@ func printSessions() error {
 		return err
 	}
 
-	for k, v := range entry {
-		fmt.Println(k, v)
+	for _, v := range entry {
+		if !v.IsDir() {
+			fmt.Println(strings.TrimSuffix(v.Name(), ".json"))
+		}
 	}
 
 	return nil
