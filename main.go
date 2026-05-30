@@ -160,8 +160,10 @@ func executeCommand(input string, s *session) error {
 			rawAfterPath = rawAfterPath[:strings.Index(rawAfterPath, "|")]
 		}
 		jsonBody = strings.TrimSpace(rawAfterPath)
+		isFormData := false
 
 		if jsonBody != "" && !strings.HasPrefix(jsonBody, "{") && !strings.HasPrefix(jsonBody, "[") && strings.Contains(jsonBody, "=") {
+			isFormData = true
 			form, err := url.ParseQuery(jsonBody)
 			if err != nil {
 				return fmt.Errorf("invalid form data: %w", err)
@@ -178,6 +180,16 @@ func executeCommand(input string, s *session) error {
 			}
 		}
 
+		method := strings.ToUpper(parts[0])
+		contentType := ""
+		if method == "POST" || method == "PATCH" || method == "PUT" {
+			if isFormData {
+				contentType = "application/x-www-form-urlencoded"
+			} else {
+				contentType = "application/json"
+			}
+		}
+
 		_, err := exec.LookPath("jq")
 		if err != nil {
 			return fmt.Errorf("jq not found in the $PATH")
@@ -191,8 +203,7 @@ func executeCommand(input string, s *session) error {
 
 		jsonBody = interpolate(jsonBody, s)
 		endpoint := interpolate(parts[1], s)
-		method := strings.ToUpper(parts[0])
-		output, err := makeRequest(method, endpoint, s, jsonBody)
+		output, err := makeRequest(method, endpoint, s, jsonBody, contentType)
 		if err != nil {
 			return fmt.Errorf("request failed: %w", err)
 		}
@@ -211,7 +222,6 @@ func executeCommand(input string, s *session) error {
 			} else {
 				output.body = strings.TrimSpace(out.String())
 			}
-			output.body = strings.TrimSpace(out.String())
 		}
 
 		printOutput(*output)
@@ -266,7 +276,7 @@ func executeCommand(input string, s *session) error {
 	return nil
 }
 
-func makeRequest(method, endpoint string, s *session, b string) (*output, error) {
+func makeRequest(method, endpoint string, s *session, b, contentType string) (*output, error) {
 	url := s.host + endpoint
 
 	var bodyReader io.Reader
@@ -281,6 +291,12 @@ func makeRequest(method, endpoint string, s *session, b string) (*output, error)
 
 	for k, v := range s.headers {
 		req.Header.Set(k, v)
+	}
+
+	if contentType != "" {
+		if _, userSet := s.headers["Content-Type"]; !userSet {
+			req.Header.Set("Content-Type", contentType)
+		}
 	}
 
 	res, err := s.c.Do(req)
