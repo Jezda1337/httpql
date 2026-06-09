@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -38,6 +39,18 @@ type output struct {
 	status string
 }
 
+type headers []string
+
+func (i *headers) String() string {
+	// change this, this is just can example to satisfy the interface
+	return "my string representation"
+}
+
+func (i *headers) Set(value string) error {
+	*i = append(*i, strings.TrimSpace(value))
+	return nil
+}
+
 func main() {
 	jar, _ := cookiejar.New(nil)
 	s := session{
@@ -47,6 +60,48 @@ func main() {
 		c: &http.Client{
 			Jar: jar,
 		},
+	}
+
+	var headers headers
+	flag.Var(&headers, "H", "headers")
+	host := flag.String("host", "", "Host")
+	dataRaw := flag.String("d", "", "data")
+	method := flag.String("m", "GET", "method")
+
+	flag.Parse()
+
+	var contentType string
+	if strings.Contains(*dataRaw, "{") {
+		contentType = "Content-Type: application/json"
+	} else {
+	}
+
+	for _, header := range headers {
+		parts := strings.Split(header, " ")
+
+		s.headers[parts[0]] = parts[1]
+	}
+
+	url, _ := url.Parse(*host)
+
+	fullURLWithoutPath, _ := strings.CutSuffix(url.String(), url.Path)
+
+	s.host = fullURLWithoutPath
+
+	o, err := makeRequest(*method, url.Path, &s, *dataRaw, contentType)
+	if err != nil {
+		fmt.Println("error: ", err)
+		return
+	}
+
+	// fmt.Println("---------")
+	// fmt.Println(o.method, o.url)
+	// fmt.Println("Status: ", o.status)
+	// fmt.Println("---------")
+	fmt.Println(o.body)
+
+	if host != nil {
+		return
 	}
 
 	// defaultPrompt := "httpql> "
