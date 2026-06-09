@@ -258,6 +258,12 @@ func executeCommand(input string, s *session) error {
 				fmt.Printf("failed to save session %s\n", name)
 			}
 		}
+		if key == "del" {
+			err := deleteSession(name)
+			if err != nil {
+				fmt.Printf("failed to remove session %s\n", name)
+			}
+		}
 		if key == "use" {
 			ls, err := loadSession(name)
 			if err != nil {
@@ -339,6 +345,13 @@ func printOutput(o output) {
 	fmt.Println("Status: ", o.status)
 	fmt.Println("---------")
 	fmt.Println(o.body)
+}
+
+func deleteSession(name string) error {
+	dir := filepath.Join(os.Getenv("HOME"), ".httpql")
+	file := filepath.Join(dir, name+".json")
+
+	return os.Remove(file)
 }
 
 func saveSession(name string, s *session) error {
