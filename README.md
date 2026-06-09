@@ -5,6 +5,10 @@
 HTTPQL is a psql-inspired interactive shell for exploring and working with HTTP APIs from the terminal.
 
 ```sh
+# for simple testing we can use program this way (order is not matter) (work in progress)
+# -H can be used multiple times -H=... -H...
+$ httpql -host=https://jsonplaceholder.typicode.com/users/1 -H="Content-Type: application/json" -d="{...}" -m=GET | jq ...
+
 $ httpql
 
 » \set host http://localhost:6969
@@ -35,6 +39,7 @@ $ httpql
 » \sessions # print all sessions
 » \session save session-name
 » \session use session-name
+» \session del session-name
 
 » \env # print current session data
 
