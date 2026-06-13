@@ -43,12 +43,22 @@ type headers []string
 
 func (i *headers) String() string {
 	// change this, this is just can example to satisfy the interface
-	return "my string representation"
+	return "yoyo"
 }
 
 func (i *headers) Set(value string) error {
 	*i = append(*i, strings.TrimSpace(value))
 	return nil
+}
+
+func isFlagPassed(name string) bool {
+	found := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = true
+		}
+	})
+	return found
 }
 
 func main() {
@@ -70,39 +80,41 @@ func main() {
 
 	flag.Parse()
 
-	var contentType string
-	if strings.Contains(*dataRaw, "{") {
-		contentType = "Content-Type: application/json"
-	} else {
-	}
+	if isFlagPassed("host") || isFlagPassed("d") || isFlagPassed("m") || isFlagPassed("H") {
+		var contentType string
+		if strings.Contains(*dataRaw, "{") {
+			contentType = "Content-Type: application/json"
+		} else {
+		}
 
-	for _, header := range headers {
-		parts := strings.Split(header, " ")
+		for _, header := range headers {
+			parts := strings.Split(header, " ")
 
-		s.headers[parts[0]] = parts[1]
-	}
+			s.headers[parts[0]] = parts[1]
+		}
 
-	url, _ := url.Parse(*host)
+		url, _ := url.Parse(*host)
 
-	fullURLWithoutPath, _ := strings.CutSuffix(url.String(), url.Path)
+		fullURLWithoutPath, _ := strings.CutSuffix(url.String(), url.Path)
 
-	s.host = fullURLWithoutPath
+		s.host = fullURLWithoutPath
 
-	o, err := makeRequest(*method, url.Path, &s, *dataRaw, contentType)
-	if err != nil {
-		fmt.Println("error: ", err)
+		o, err := makeRequest(*method, url.Path, &s, *dataRaw, contentType)
+		if err != nil {
+			fmt.Println("error: ", err)
+			return
+		}
+
+		// fmt.Println("---------")
+		// fmt.Println(o.method, o.url)
+		// fmt.Println("Status: ", o.status)
+		// fmt.Println("---------")
+		fmt.Println(o.body)
+
 		return
 	}
 
-	// fmt.Println("---------")
-	// fmt.Println(o.method, o.url)
-	// fmt.Println("Status: ", o.status)
-	// fmt.Println("---------")
-	fmt.Println(o.body)
-
-	if host != nil {
-		return
-	}
+	// interactive mode
 
 	// defaultPrompt := "httpql> "
 	defaultPrompt := "\033[31m»\033[0m "
