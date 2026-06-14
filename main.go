@@ -41,10 +41,9 @@ type output struct {
 
 type headers []string
 
-func (i *headers) String() string {
-	// change this, this is just can example to satisfy the interface
-	return "yoyo"
-}
+// string method is user as default value
+// define string method to satisfy the interface
+func (i *headers) String() string { return "" }
 
 func (i *headers) Set(value string) error {
 	*i = append(*i, strings.TrimSpace(value))
