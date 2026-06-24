@@ -6,46 +6,45 @@ HTTPQL is a psql-inspired interactive shell for exploring and working with HTTP 
 
 ```sh
 # for simple testing we can use program this way (order is not matter) (work in progress)
-# -H can be used multiple times -H=... -H...
-$ httpql -host=https://jsonplaceholder.typicode.com/users/1 -H="Content-Type: application/json" -d="{...}" -m=GET | jq ...
+$ httpql jsonplaceholder.typicode.com/users/1 -H "Content-Type: application/json" --json '{"...": "..."}' -M POST | jq ...
 
-$ httpql
+$ httpql # interactive mode
 
-» \set host http://localhost:6969
-» \set token abc123
-» \header Authorization Bearer {{token}}
-» \q # exit
+httpql> \set host http://localhost:6969
+httpql> \set token abc123
+httpql> \set verbose on # will show more details about request
+httpql> \header Authorization Bearer {{token}}
+httpql> \q # exit
 
-» get /users; # ; trigger the request
+httpql> get /users; # ; trigger the request
 # basically ; means run this query
 
 # example on how can we send the JSON
-» post /users/69 {
+httpql> post /users/69 {
 > "name": "John Doe",
 > };
 
 # example on how to use variables
-» \set userID 69
-» get /users/{{userID}};
+httpql> \set userID 69
+httpql> get /users/{{userID}};
 
 # example on how to use pipe with `jq` to extract JSON
 # this will return just name ignoring rest of the response
-» get /users/{{userID}} | jq .name
+# httpql> get /users/{{userID}} | jq .name
 
 # example on how to use/save session
 # sessions are stored in $HOME/.httpql/
 # saved sessions holds all data you had set first, host, vars, headers, does not save history
 # using saved session loads host, vars and headers
-» \sessions # print all sessions
-» \session save session-name
-» \session use session-name
-» \session del session-name
+httpql> \session list # print all sessions
+httpql> \session save session-name
+httpql> \session load session-name
+httpql> \session delete session-name
 
-» \env # print current session data
+httpql> \print # print current session data
 
 ---------
 GET http://localhost:6969/users
-Status: 200 OK
 ---------
 
 [
@@ -62,6 +61,12 @@ Status: 200 OK
 git clone https://github.com/jezda1337/httpql
 cd httpql
 go build -o hreq main.go
+```
+
+## Install
+
+```sh
+make install # this cmd will build && move prgram to ~/.local/bin
 ```
 
 ## Philosophy
