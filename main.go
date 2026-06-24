@@ -157,6 +157,7 @@ func main() {
 
 func execute(input string, s *Session) {
 	isCommand := strings.HasPrefix(input, "\\")
+	isVerbose := false
 	shouldExecute := strings.HasSuffix(input, ";")
 
 	input = strings.TrimSpace(input)
@@ -198,8 +199,6 @@ func execute(input string, s *Session) {
 
 		s.Body = interpolate(rawBody, s)
 
-		fmt.Println(s.Body)
-
 		if isJSON(rawBody) {
 			if _, found := s.Headers["Content-Type"]; !found {
 				s.Headers["Content-Type"] = "application/json"
@@ -218,7 +217,14 @@ func execute(input string, s *Session) {
 
 		s.Host = resetHost
 
+		for k, v := range s.Variables {
+			if k == "verbose" && (v == "on" || v == "true") {
+				isVerbose = true
+			}
+		}
+
 		printOut(PrintOut{
+			verbose:  isVerbose,
 			response: response,
 			request:  response.Request,
 		})
@@ -246,8 +252,6 @@ func makeRequest(s *Session) (*http.Response, error) {
 		return nil, err
 	}
 
-	fmt.Printf("response.Request.Method: %v\n", response.Request.Method)
-
 	return response, nil
 }
 
@@ -259,13 +263,13 @@ func setCommand(parts []string, session *Session) {
 	case "host":
 		session.Host = removeTrailingSlash(guessScheme(value[0]))
 		fmt.Print("OK")
-	case "header": // FIXME !!
+	case "header":
 		if len(value) < 2 {
 			return
 		}
-		header := strings.Split(value[0], " ")
-		hk := header[0]
-		hv := header[1]
+
+		hk := value[0]
+		hv := value[1]
 		session.Headers[hk] = hv
 		fmt.Print("OK")
 	default:
@@ -444,9 +448,7 @@ func printSession(s *Session) {
 
 	fmt.Println("\nheaders:")
 	for k, v := range s.Headers {
-		if k == "Content-Type" {
-			fmt.Printf("\t%s = %s\n", k, v)
-		}
+		fmt.Printf("\t%s = %s\n", k, v)
 	}
 
 	u, _ := url.Parse(s.Host)
