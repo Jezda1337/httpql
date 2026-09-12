@@ -14,6 +14,7 @@ httpql> \set host http://localhost:6969
 httpql> \set token abc123
 httpql> \set verbose on # will show more details about request
 httpql> \header Authorization Bearer {{token}}
+httpql> \g # run last command
 httpql> \q # exit
 
 httpql> get /users; # ; trigger the request

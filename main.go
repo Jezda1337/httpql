@@ -22,7 +22,8 @@ type Session struct {
 	Variables map[string]string `json:"variables"`
 	Cookies   []*http.Cookie    `json:"cookies"`
 
-	httpClient *http.Client
+	httpClient  *http.Client
+	LastCommnad string
 }
 
 type PrintOut struct {
@@ -136,6 +137,10 @@ func main() {
 			break
 		}
 
+		if line != "" && line != "\\g" {
+			session.LastCommnad = line
+		}
+
 		if strings.HasPrefix(line, "\\") {
 			execute(line, &session)
 			continue
@@ -173,6 +178,8 @@ func execute(input string, s *Session) {
 			setCookie(parts[1:], s)
 		case "\\print":
 			printSession(s)
+		case "\\g":
+			execute(s.LastCommnad, s)
 		case "\\q":
 			// TODO - add simple confirmation prompt if user didn't save current session
 			os.Exit(0)
@@ -351,6 +358,7 @@ func loadSession(name string) (*Session, error) {
 		httpClient: &http.Client{
 			Jar: jar,
 		},
+		LastCommnad: session.LastCommnad,
 	}, nil
 }
 
