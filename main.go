@@ -83,7 +83,7 @@ func main() {
 				i++
 			case "--json":
 				rawData := args[i+1]
-				jsonData, _ := json.Marshal(rawData)
+				jsonData, _ := json.Marshal(json.RawMessage(rawData))
 				session.Body = string(jsonData)
 				i++
 			case "--fd":
@@ -111,6 +111,7 @@ func main() {
 
 		response, err := makeRequest(&session)
 		if err != nil {
+			fmt.Printf("ERROR: %s", err.Error())
 			return
 		}
 		defer response.Body.Close()
