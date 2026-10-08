@@ -64,6 +64,9 @@ func main() {
 		isVerbose := false
 		for i := 0; i < len(args); i++ {
 			switch args[i] {
+			case "ls":
+				_ = listSessions()
+				return
 			case "-v", "--verbose":
 				isVerbose = true
 			case "-H", "--header":
