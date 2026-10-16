@@ -420,34 +420,50 @@ func removeTrailingSlash(host string) string {
 func printOut(po PrintOut) {
 	// > = request data
 	// < = response data
+	RESET := "\x1b[0m"
+	KEY_COLOR := "\x1b[38;2;150;166;200m"
+	URL_COLOR := "\x1b[4;38;2;130;170;255m"
+
 	body, err := io.ReadAll(po.response.Body)
 	if err != nil {
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, "> %s %s\n", po.request.Method, po.request.URL.String())
+	fmt.Fprintf(os.Stderr, "> %s%s%s %s%s%s\n", KEY_COLOR, po.request.Method, RESET, URL_COLOR, po.request.URL.String(), RESET)
+	fmt.Fprintf(os.Stderr, "< %sStatus:%s %s%s%s\n", KEY_COLOR, RESET, statusColor(po.response.StatusCode), po.response.Status, RESET)
 	if po.verbose {
-		fmt.Fprintf(os.Stderr, "> Content-Length: %d\n", po.request.ContentLength)
+		fmt.Fprintf(os.Stderr, "> %sContent-Length:%s %d\n", KEY_COLOR, RESET, po.request.ContentLength)
 		if po.request.UserAgent() != "" {
-			fmt.Fprintf(os.Stderr, "> User-Agent: %s\n", po.request.UserAgent())
+			fmt.Fprintf(os.Stderr, "> %sUser-Agent: %s\n", KEY_COLOR, RESET, po.request.UserAgent())
 		} else {
-			fmt.Fprintf(os.Stderr, "> User-Agent: %s\n", "httpql 0.1.0")
+			fmt.Fprintf(os.Stderr, "> %sUser-Agent:%s %s\n", KEY_COLOR, RESET, "httpql 0.1.0")
 		}
 		for k, v := range po.request.Header {
 			if k == "Content-Type" {
-				fmt.Fprintf(os.Stderr, "> %s: %s\n", k, v[0])
+				fmt.Fprintf(os.Stderr, "> %s%s:%s %s\n", KEY_COLOR, k, RESET, v[0])
 			} else {
-				fmt.Fprintf(os.Stderr, "> %s: %s\n", k, v)
+				fmt.Fprintf(os.Stderr, "> %s%s:%s %s\n", KEY_COLOR, k, RESET, v)
 			}
 		}
 
-		fmt.Fprintf(os.Stderr, "< Status: %s\n", po.response.Status)
+		fmt.Fprintf(os.Stderr, "< %sStatus:%s %s%s%s\n", KEY_COLOR, RESET, statusColor(po.response.StatusCode), po.response.Status, RESET)
 		for k, v := range po.response.Header {
-			fmt.Fprintf(os.Stderr, "< %s: %s\n", k, v)
+			fmt.Fprintf(os.Stderr, "< %s%s:%s %s\n", KEY_COLOR, k, RESET, v)
 		}
 	}
 
 	fmt.Fprintf(os.Stdout, "%s\n", string(body))
+}
+
+func statusColor(code int) string {
+	switch {
+	case code >= 500, code >= 400:
+		return "\x1b[31m" // red
+	case code >= 300:
+		return "\x1b[33m" // yellow
+	default:
+		return "\x1b[32m" // green
+	}
 }
 
 func printSession(s *Session) {
