@@ -430,7 +430,9 @@ func printOut(po PrintOut) {
 	}
 
 	fmt.Fprintf(os.Stderr, "> %s%s%s %s%s%s\n", KEY_COLOR, po.request.Method, RESET, URL_COLOR, po.request.URL.String(), RESET)
-	fmt.Fprintf(os.Stderr, "< %sStatus:%s %s%s%s\n", KEY_COLOR, RESET, statusColor(po.response.StatusCode), po.response.Status, RESET)
+	if !po.verbose {
+		fmt.Fprintf(os.Stderr, "< %sStatus:%s %s%s%s\n", KEY_COLOR, RESET, statusColor(po.response.StatusCode), po.response.Status, RESET)
+	}
 	if po.verbose {
 		fmt.Fprintf(os.Stderr, "> %sContent-Length:%s %d\n", KEY_COLOR, RESET, po.request.ContentLength)
 		if po.request.UserAgent() != "" {
