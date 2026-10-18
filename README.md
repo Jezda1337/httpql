@@ -13,7 +13,7 @@ $ httpql # interactive mode
 httpql> \set host http://localhost:6969
 httpql> \set token abc123
 httpql> \set verbose on # will show more details about request
-httpql> \header Authorization Bearer {{token}}
+httpql> \set header Authorization Bearer {{token}}
 httpql> \g # run last command
 httpql> \q # exit
 
@@ -61,7 +61,7 @@ GET http://localhost:6969/users
 ```sh
 git clone https://github.com/jezda1337/httpql
 cd httpql
-go build -o hreq main.go
+go build -o httpql main.go
 ```
 
 ## Install
