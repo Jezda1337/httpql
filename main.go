@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"net/http/httptrace"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -258,6 +259,14 @@ func makeRequest(s *Session, method, url, body string) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// trace := &httptrace.ClientTrace{
+	// 	GotConn: func(gci httptrace.GotConnInfo) {
+	// 		fmt.Fprintf(os.Stderr, "* connection reused: %v\n", gci.Reused)
+	// 	},
+	// }
+	//
+	// req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
 
 	for hk, hv := range s.Headers {
 		req.Header.Set(hk, hv)
