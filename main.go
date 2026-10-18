@@ -34,10 +34,11 @@ type PrintOut struct {
 }
 
 var allowdHTTPMethods = map[string]bool{
-	"GET":   true,
-	"POST":  true,
-	"PUT":   true,
-	"PATCH": true,
+	"GET":    true,
+	"POST":   true,
+	"PUT":    true,
+	"PATCH":  true,
+	"DELETE": true,
 }
 
 func main() {
