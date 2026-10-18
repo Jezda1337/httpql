@@ -17,8 +17,6 @@ import (
 type Session struct {
 	Host      string            `json:"host"`
 	Headers   map[string]string `json:"headers"`
-	Method    string            `json:"method"`
-	Body      string            `json:"body"`
 	Variables map[string]string `json:"variables"`
 	Cookies   []*http.Cookie    `json:"cookies"`
 
@@ -44,13 +42,15 @@ var allowdHTTPMethods = map[string]bool{
 func main() {
 	args := os.Args[1:]
 
-	jar, _ := cookiejar.New(nil)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		fmt.Printf("failed to initialize cookijar >> %v\n", err)
+		return
+	}
 
 	session := Session{
 		Host:      "",
 		Headers:   map[string]string{},
-		Method:    "",
-		Body:      "",
 		Variables: map[string]string{},
 		httpClient: &http.Client{
 			Jar: jar,
@@ -63,10 +63,13 @@ func main() {
 
 	if len(args) != 0 {
 		isVerbose := false
+		var method, URL, body string
 		for i := 0; i < len(args); i++ {
 			switch args[i] {
 			case "ls":
-				_ = listSessions()
+				if err := listSessions(); err != nil {
+					fmt.Printf("failed to list sessions >> %v\n", err)
+				}
 				return
 			case "-v", "--verbose":
 				isVerbose = true
@@ -83,17 +86,25 @@ func main() {
 					return
 				}
 
-				session.Method = m
+				method = m
 				i++
 			case "--json":
 				rawData := args[i+1]
-				jsonData, _ := json.Marshal(json.RawMessage(rawData))
-				session.Body = string(jsonData)
+				jsonData, err := json.Marshal(json.RawMessage(rawData))
+				if err != nil {
+					fmt.Printf("failed to marshal json >>%v\n", err)
+					return
+				}
+				body = string(jsonData)
 				i++
 			case "--fd":
 				formDataRaw := args[i+1]
-				formData, _ := url.ParseQuery(formDataRaw)
-				session.Body = formData.Encode()
+				formData, err := url.ParseQuery(formDataRaw)
+				if err != nil {
+					fmt.Printf("failed to parse query >> %v\n", err)
+					return
+				}
+				body = formData.Encode()
 
 				session.Headers["Content-Type"] = "application/x-www-form-urlencoded"
 				i++
@@ -109,11 +120,11 @@ func main() {
 			// 	}
 			// 	i++
 			default:
-				session.Host = removeTrailingSlash(guessScheme(args[i]))
+				URL = removeTrailingSlash(guessScheme(args[i]))
 			}
 		}
 
-		response, err := makeRequest(&session)
+		response, err := makeRequest(&session, method, URL, body)
 		if err != nil {
 			fmt.Printf("ERROR: %s", err.Error())
 			return
@@ -147,7 +158,9 @@ func main() {
 		}
 
 		if strings.HasPrefix(line, "\\") {
-			execute(line, &session)
+			if err := execute(line, &session); err != nil {
+				fmt.Println(err)
+			}
 			continue
 		}
 
@@ -159,13 +172,15 @@ func main() {
 			rl.SaveHistory(line)
 			buffer = nil
 			rl.SetPrompt("httpql> ")
-			execute(line, &session)
+			if err := execute(line, &session); err != nil {
+				fmt.Println(err)
+			}
 		}
 
 	}
 }
 
-func execute(input string, s *Session) {
+func execute(input string, s *Session) error {
 	isCommand := strings.HasPrefix(input, "\\")
 	isVerbose := false
 	shouldExecute := strings.HasSuffix(input, ";")
@@ -178,13 +193,13 @@ func execute(input string, s *Session) {
 		case "\\set":
 			setCommand(parts[1:], s)
 		case "\\session":
-			handleSession(parts[1:], s)
+			return handleSession(parts[1:], s)
 		case "\\cookie":
-			setCookie(parts[1:], s)
+			return setCookie(parts[1:], s)
 		case "\\print":
-			printSession(s)
+			return printSession(s)
 		case "\\g":
-			execute(s.LastCommnad, s)
+			return execute(s.LastCommnad, s)
 		case "\\q":
 			// TODO - add simple confirmation prompt if user didn't save current session
 			os.Exit(0)
@@ -192,42 +207,26 @@ func execute(input string, s *Session) {
 	} else {
 		method := strings.ToUpper(parts[0])
 		if _, found := allowdHTTPMethods[method]; !found {
-			return
+			// TODO: return method is not supported error message
+			return fmt.Errorf("method is not suppored: [%s]", method)
 		}
-
-		s.Method = method
 
 		path := interpolate(parts[1], s) // e.g /users
 
-		resetHost := s.Host
-
-		// forging full temp url
-		s.Host = s.Host + path
+		url := s.Host + path
 
 		rawBody := strings.Join(parts[2:], " ")
 		if shouldExecute {
 			rawBody = strings.TrimSuffix(rawBody, ";")
 		}
 
-		s.Body = interpolate(rawBody, s)
+		body := interpolate(rawBody, s)
 
-		if isJSON(rawBody) {
-			if _, found := s.Headers["Content-Type"]; !found {
-				s.Headers["Content-Type"] = "application/json"
-			}
-		} else {
-			if _, found := s.Headers["Content-Type"]; !found {
-				s.Headers["Content-Type"] = "application/x-www-form-urlencoded"
-			}
-		}
-
-		response, err := makeRequest(s)
+		response, err := makeRequest(s, method, url, body)
 		if err != nil {
-			return
+			return fmt.Errorf("request have failed: %w", err)
 		}
 		defer response.Body.Close()
-
-		s.Host = resetHost
 
 		for k, v := range s.Variables {
 			if k == "verbose" && (v == "on" || v == "true") {
@@ -242,21 +241,30 @@ func execute(input string, s *Session) {
 		})
 
 	}
+	return nil
 }
 
-func makeRequest(s *Session) (*http.Response, error) {
+func makeRequest(s *Session, method, url, body string) (*http.Response, error) {
 	var reader io.Reader
-	if s.Body != "" {
-		reader = strings.NewReader(s.Body)
+	if body != "" {
+		reader = strings.NewReader(body)
 	}
 
-	req, err := http.NewRequest(s.Method, s.Host, reader)
+	req, err := http.NewRequest(method, url, reader)
 	if err != nil {
 		return nil, err
 	}
 
 	for hk, hv := range s.Headers {
 		req.Header.Set(hk, hv)
+	}
+
+	if req.Header.Get("Content-Type") == "" {
+		if isJSON(body) {
+			req.Header.Set("Content-Type", "application/json")
+		} else {
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		}
 	}
 
 	response, err := s.httpClient.Do(req)
@@ -291,7 +299,7 @@ func setCommand(parts []string, session *Session) {
 	}
 }
 
-func handleSession(parts []string, session *Session) {
+func handleSession(parts []string, session *Session) error {
 	key := parts[0]
 	name := ""
 	if len(parts) >= 2 {
@@ -300,18 +308,29 @@ func handleSession(parts []string, session *Session) {
 
 	switch key {
 	case "list":
-		_ = listSessions()
+		if err := listSessions(); err != nil {
+			return fmt.Errorf("failed to list sessions >> %w", err)
+		}
 	case "save":
-		_ = saveSession(session, name)
+		if err := saveSession(session, name); err != nil {
+			return fmt.Errorf("failed to save session: [%s] >> %w", name, err)
+		}
 		fmt.Println("OK")
 	case "load":
-		loadedSession, _ := loadSession(name)
+		loadedSession, err := loadSession(name)
+		if err != nil {
+			return fmt.Errorf("faild to load session: [%s] >> %w", name, err)
+		}
 		*session = *loadedSession
 		fmt.Println("OK")
 	case "delete":
-		_ = deleteSession(name)
+		if err := deleteSession(name); err != nil {
+			return fmt.Errorf("failed to delete session: [%s] >> %w", name, err)
+		}
 		fmt.Println("OK")
 	}
+
+	return nil
 }
 
 func listSessions() error {
@@ -351,8 +370,14 @@ func loadSession(name string) (*Session, error) {
 		return nil, err
 	}
 
-	jar, _ := cookiejar.New(nil)
-	u, _ := url.Parse(session.Host)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize cookiejar >>%w", err)
+	}
+	u, err := url.Parse(session.Host)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse host >>%w", err)
+	}
 	jar.SetCookies(u, session.Cookies)
 
 	return &Session{
@@ -369,11 +394,16 @@ func loadSession(name string) (*Session, error) {
 
 func saveSession(s *Session, name string) error {
 	dir := filepath.Join(os.Getenv("HOME"), ".httpql")
-	os.MkdirAll(dir, 0755)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
 
 	file := filepath.Join(dir, name+".json")
 
-	u, _ := url.Parse(s.Host)
+	u, err := url.Parse(s.Host)
+	if err != nil {
+		return err
+	}
 	cookies := s.httpClient.Jar.Cookies(u)
 	s.Cookies = cookies
 
@@ -385,16 +415,21 @@ func saveSession(s *Session, name string) error {
 	return os.WriteFile(file, b, 0644)
 }
 
-func setCookie(parts []string, s *Session) {
+func setCookie(parts []string, s *Session) error {
 	key := parts[0]
 	value := strings.Join(parts[1:], " ")
 
 	value = interpolate(value, s)
 
-	u, _ := url.Parse(s.Host)
+	u, err := url.Parse(s.Host)
+	if err != nil {
+		return fmt.Errorf("failed to parse host >>%w", err)
+	}
 	c := &http.Cookie{Name: key, Value: value, Path: "/"}
 	s.httpClient.Jar.SetCookies(u, []*http.Cookie{c})
 	fmt.Print("OK")
+
+	return nil
 }
 
 func guessScheme(host string) string {
@@ -437,7 +472,7 @@ func printOut(po PrintOut) {
 	if po.verbose {
 		fmt.Fprintf(os.Stderr, "> %sContent-Length:%s %d\n", KEY_COLOR, RESET, po.request.ContentLength)
 		if po.request.UserAgent() != "" {
-			fmt.Fprintf(os.Stderr, "> %sUser-Agent: %s\n", KEY_COLOR, RESET, po.request.UserAgent())
+			fmt.Fprintf(os.Stderr, "> %sUser-Agent: %s%s\n", KEY_COLOR, RESET, po.request.UserAgent())
 		} else {
 			fmt.Fprintf(os.Stderr, "> %sUser-Agent:%s %s\n", KEY_COLOR, RESET, "httpql 0.1.0")
 		}
@@ -469,7 +504,7 @@ func statusColor(code int) string {
 	}
 }
 
-func printSession(s *Session) {
+func printSession(s *Session) error {
 	fmt.Println("host =", s.Host)
 
 	fmt.Println("\nvars:")
@@ -482,11 +517,15 @@ func printSession(s *Session) {
 		fmt.Printf("\t%s = %s\n", k, v)
 	}
 
-	u, _ := url.Parse(s.Host)
+	u, err := url.Parse(s.Host)
+	if err != nil {
+		return fmt.Errorf("failed to parse host >>%w", err)
+	}
 	fmt.Println("\ncookies:")
 	for _, c := range s.httpClient.Jar.Cookies(u) {
 		fmt.Printf("\t%s = %s\n", c.Name, c.Value)
 	}
+	return nil
 }
 
 func interpolate(input string, s *Session) string {
