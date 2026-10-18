@@ -158,6 +158,7 @@ func main() {
 		}
 
 		if strings.HasPrefix(line, "\\") {
+			line = strings.Join(strings.Fields(line), " ")
 			if err := execute(line, &session); err != nil {
 				fmt.Println(err)
 			}
@@ -181,9 +182,10 @@ func main() {
 }
 
 func execute(input string, s *Session) error {
+	input = strings.TrimSpace(input)
+
 	isCommand := strings.HasPrefix(input, "\\")
 	isVerbose := false
-	shouldExecute := strings.HasSuffix(input, ";")
 
 	input = strings.TrimSpace(input)
 	parts := strings.Split(input, " ")
@@ -205,22 +207,24 @@ func execute(input string, s *Session) error {
 			os.Exit(0)
 		}
 	} else {
-		method := strings.ToUpper(parts[0])
+		method, rest, _ := strings.Cut(input, " ")
+		rest = strings.TrimSpace(rest)
+		path, body, _ := strings.Cut(rest, " ")
+		body = strings.TrimSpace(body)
+
+		method = strings.ToUpper(method)
+
 		if _, found := allowdHTTPMethods[method]; !found {
-			// TODO: return method is not supported error message
-			return fmt.Errorf("method is not suppored: [%s]", method)
+			return fmt.Errorf("%s method is not suppored", method)
 		}
 
-		path := interpolate(parts[1], s) // e.g /users
+		if path == "" {
+			return fmt.Errorf("missing path, e.g. get /users")
+		}
 
+		path = interpolate(path, s) // e.g /users
 		url := s.Host + path
-
-		rawBody := strings.Join(parts[2:], " ")
-		if shouldExecute {
-			rawBody = strings.TrimSuffix(rawBody, ";")
-		}
-
-		body := interpolate(rawBody, s)
+		body = interpolate(body, s)
 
 		response, err := makeRequest(s, method, url, body)
 		if err != nil {
