@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
-	"net/http/httptrace"
 	"net/url"
 	"os"
 	"path/filepath"
